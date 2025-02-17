@@ -11,9 +11,9 @@
     <OutputFileExtension>.obj</OutputFileExtension>
     <OutputDirectory>$(MSBuildProjectDirectory)\$(Configuration)</OutputDirectory>
     <Language>ASSEMBLY</Language>
-    <AssemblyName>Ejemplo1</AssemblyName>
-    <Name>Ejemplo1</Name>
-    <RootNamespace>Ejemplo1</RootNamespace>
+    <AssemblyName>PreLab1.2</AssemblyName>
+    <Name>PreLab1.2</Name>
+    <RootNamespace>PreLab1.2</RootNamespace>
     <ToolchainFlavour>Native</ToolchainFlavour>
     <EntryFile>$(MSBuildProjectDirectory)\main.asm</EntryFile>
     <KeepTimersRunning>true</KeepTimersRunning>
@@ -65,7 +65,6 @@
   <avrasm.assembler.general.IncludeFile>m328Pdef.inc</avrasm.assembler.general.IncludeFile>
 </AvrAssembler>
     </ToolchainSettings>
-    <OutputType>Executable</OutputType>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>

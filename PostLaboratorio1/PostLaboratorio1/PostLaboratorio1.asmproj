@@ -11,9 +11,9 @@
     <OutputFileExtension>.obj</OutputFileExtension>
     <OutputDirectory>$(MSBuildProjectDirectory)\$(Configuration)</OutputDirectory>
     <Language>ASSEMBLY</Language>
-    <AssemblyName>Ejemplo1</AssemblyName>
-    <Name>Ejemplo1</Name>
-    <RootNamespace>Ejemplo1</RootNamespace>
+    <AssemblyName>PostLaboratorio1</AssemblyName>
+    <Name>PostLaboratorio1</Name>
+    <RootNamespace>PostLaboratorio1</RootNamespace>
     <ToolchainFlavour>Native</ToolchainFlavour>
     <EntryFile>$(MSBuildProjectDirectory)\main.asm</EntryFile>
     <KeepTimersRunning>true</KeepTimersRunning>
