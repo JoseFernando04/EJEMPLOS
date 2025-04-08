@@ -1,18 +1,17 @@
 /*
- * PreLab4.c
+ * PreLab4_Completo.c
  *
- * Created: 30/03/2025
+ * Created: 31/03/2025
  * Author: José Gordillo
+ *
+ * Descripción: Integración de contador binario de 8 bits con botones y
+ * visualización de valor ADC en formato hexadecimal en displays de 7 segmentos
+ * Sin usar la librería delay.h
  */
 
-// Encabezado (Libraries)
-
-#define F_CPU 16000000
+#define F_CPU 16000000UL
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <util/delay.h>
-
-//
 
 // Definiciones para los segmentos (cátodo común)
 #define SEG_A   (1 << 0)
@@ -24,8 +23,8 @@
 #define SEG_G   (1 << 6)
 #define SEG_DP  (1 << 7)
 
-// Arreglo con los valores para mostrar dígitos 0-9 en display de 7 segmentos (cátodo común)
-const uint8_t digitos[] = {
+// Arreglo con los valores para mostrar dígitos 0-F en display de 7 segmentos (cátodo común)
+const uint8_t digitos_hex[] = {
     SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F,         // 0
     SEG_B | SEG_C,                                          // 1
     SEG_A | SEG_B | SEG_G | SEG_E | SEG_D,                 // 2
@@ -35,31 +34,41 @@ const uint8_t digitos[] = {
     SEG_A | SEG_F | SEG_G | SEG_C | SEG_D | SEG_E,         // 6
     SEG_A | SEG_B | SEG_C,                                 // 7
     SEG_A | SEG_B | SEG_C | SEG_D | SEG_E | SEG_F | SEG_G, // 8
-    SEG_A | SEG_B | SEG_C | SEG_D | SEG_F | SEG_G          // 9
+    SEG_A | SEG_B | SEG_C | SEG_D | SEG_F | SEG_G,         // 9
+    SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,         // A
+    SEG_F | SEG_E | SEG_G | SEG_C | SEG_D,                 // b
+    SEG_A | SEG_F | SEG_E | SEG_D,                         // C
+    SEG_B | SEG_C | SEG_G | SEG_E | SEG_D,                 // d
+    SEG_A | SEG_F | SEG_G | SEG_E | SEG_D,                 // E
+    SEG_A | SEG_F | SEG_G | SEG_E                          // F
 };
 
 // Variables globales
 // Para el contador binario
 volatile uint8_t contador = 0;
-volatile uint8_t debounceFlag = 0;
+volatile uint8_t btn_prev_state = 0;
+volatile uint16_t antirebote_contador = 0;
 
 // Para el ADC y displays
 volatile uint16_t adc_value = 0;
-volatile uint8_t display_decenas = 0;
-volatile uint8_t display_unidades = 0;
+volatile uint8_t display_msb = 0;  // Dígito hexadecimal más significativo
+volatile uint8_t display_lsb = 0;  // Dígito hexadecimal menos significativo
 volatile uint8_t display_actual = 0;
+volatile uint8_t adc_actualizado = 0;  // Flag para indicar si el ADC ha sido actualizado
 
-// Function prototypes
+// Para temporizadores
+volatile uint16_t timer_display = 0;
+volatile uint16_t timer_botones = 0;
+volatile uint8_t timer_overflow = 0;
 
+// Prototipos de funciones
 void setup(void);
 void initADC(void);
+void initTimer0(void);
 void actualizarLEDs(uint8_t valor);
-void actualizarDisplays(uint16_t valor);
+void actualizarDisplaysHex(uint16_t valor);
 void mostrarDisplay(uint8_t display, uint8_t digito);
-
-//
-
-// Main Function
+uint8_t leerBotones(void);
 
 int main(void)
 {
@@ -68,66 +77,76 @@ int main(void)
     // Estado inicial de LEDs
     actualizarLEDs(contador);
     
+    // Inicializar valores de displays
+    actualizarDisplaysHex(adc_value);
+    
     while (1)
     {
         // --- PARTE 1: CONTADOR BINARIO ---
-        // Verificar botón de incremento (PC4)
-        if (!(PINC & (1 << PC4)) && !(debounceFlag & (1 << 0)))
+        // Procesar botones cada ~20ms (usando timer_botones)
+        if (timer_botones >= 20)
         {
-            contador++;
-            actualizarLEDs(contador);
-            debounceFlag |= (1 << 0);  // Activar flag de antirebote
-            _delay_ms(20);  // Pequeño retardo para estabilización
-        }
-        else if ((PINC & (1 << PC4)) && (debounceFlag & (1 << 0)))
-        {
-            debounceFlag &= ~(1 << 0);  // Desactivar flag de antirebote
-            _delay_ms(20);  // Pequeño retardo para estabilización
-        }
-        
-        // Verificar botón de decremento (PC5)
-        if (!(PINC & (1 << PC5)) && !(debounceFlag & (1 << 1)))
-        {
-            contador--;
-            actualizarLEDs(contador);
-            debounceFlag |= (1 << 1);  // Activar flag de antirebote
-            _delay_ms(20);  // Pequeño retardo para estabilización
-        }
-        else if ((PINC & (1 << PC5)) && (debounceFlag & (1 << 1)))
-        {
-            debounceFlag &= ~(1 << 1);  // Desactivar flag de antirebote
-            _delay_ms(20);  // Pequeño retardo para estabilización
-        }
-        
-        // --- PARTE 2: ADC Y DISPLAYS ---
-        // Convertir valor ADC a voltaje (0-5V) y escalarlo a 0-50
-        uint16_t valor_escalado = (adc_value * 50) / 1023;
-        
-        // Actualizar los valores a mostrar en los displays
-        actualizarDisplays(valor_escalado);
-        
-        // Multiplexación de displays
-        if (display_actual == 0)
-        {
-            // Mostrar unidades en el primer display
-            mostrarDisplay(0, display_unidades);
-            display_actual = 1;
-        }
-        else
-        {
-            // Mostrar decenas en el segundo display
-            mostrarDisplay(1, display_decenas);
-            display_actual = 0;
+            timer_botones = 0;
+            
+            // Leer estado de botones
+            uint8_t btn_estado = leerBotones();
+            
+            // Verificar si el botón PC4 (incremento) fue presionado
+            if ((btn_estado & (1 << PC4)) && !(btn_prev_state & (1 << PC4)))
+            {
+                contador++;
+                actualizarLEDs(contador);
+                antirebote_contador = 50; // ~50ms de antirebote
+            }
+            
+            // Verificar si el botón PC5 (decremento) fue presionado
+            if ((btn_estado & (1 << PC5)) && !(btn_prev_state & (1 << PC5)))
+            {
+                contador--;
+                actualizarLEDs(contador);
+                antirebote_contador = 50; // ~50ms de antirebote
+            }
+            
+            // Actualizar el estado previo de los botones
+            btn_prev_state = btn_estado;
         }
         
-        // Tiempo entre cambios de display (ajustar según necesidad)
-        _delay_ms(5);
+        // Decrementar contador de antirebote si está activo
+        if (antirebote_contador > 0 && timer_overflow)
+        {
+            antirebote_contador--;
+            timer_overflow = 0;
+        }
+        
+        // --- PARTE 2: ADC Y DISPLAYS HEXADECIMALES ---
+        // Actualizar los valores a mostrar en los displays si el ADC ha cambiado
+        if (adc_actualizado)
+        {
+            actualizarDisplaysHex(adc_value);
+            adc_actualizado = 0;
+        }
+        
+        // Multiplexación de displays cada ~5ms
+        if (timer_display >= 5)
+        {
+            timer_display = 0;
+            
+            // Alternar entre displays
+            if (display_actual == 0)
+            {
+                // Mostrar dígito menos significativo en el primer display
+                mostrarDisplay(0, display_lsb);
+                display_actual = 1;
+            }
+            else
+            {
+                // Mostrar dígito más significativo en el segundo display
+                mostrarDisplay(1, display_msb);
+                display_actual = 0;
+            }
+        }
     }
 }
-
-//
-
-// NON-Interrupt subroutines
 
 void setup(void)
 {
@@ -156,6 +175,9 @@ void setup(void)
     // Inicializar ADC
     initADC();
     
+    // Inicializar Timer0 para temporización
+    initTimer0();
+    
     sei(); // Habilitar interrupciones globales
 }
 
@@ -174,6 +196,32 @@ void initADC(void)
     
     // Iniciar primera conversión
     ADCSRA |= (1 << ADSC);
+}
+
+void initTimer0(void)
+{
+    // Configurar Timer0 en modo CTC (Clear Timer on Compare Match)
+    TCCR0A = (1 << WGM01);
+    
+    // Prescaler = 64
+    TCCR0B = (1 << CS01) | (1 << CS00);
+    
+    // Configurar para interrumpir cada ~1ms con F_CPU = 16MHz
+    // 16MHz/64/250 = 1000Hz = 1ms
+    OCR0A = 249;
+    
+    // Habilitar interrupción de comparación
+    TIMSK0 = (1 << OCIE0A);
+}
+
+// Función para leer el estado de los botones
+uint8_t leerBotones(void)
+{
+    // Leer el estado del puerto C (botones en PC4 y PC5)
+    // Los botones son activos en bajo (pull-up), pero devolvemos activo en alto
+    // para facilitar la lógica
+    uint8_t estado = ~PINC & 0b00110000;
+    return estado;
 }
 
 // Función para actualizar el estado de los LEDs según el valor del contador
@@ -200,42 +248,54 @@ void actualizarLEDs(uint8_t valor)
     if (valor & 0x80) PORTC |= (1 << PC3);
 }
 
-void actualizarDisplays(uint16_t valor)
+// Función para actualizar los valores hexadecimales a mostrar en los displays
+void actualizarDisplaysHex(uint16_t valor)
 {
-    // Extraer dígitos individuales
-    display_decenas = valor / 10;    // Parte entera (0-5)
-    display_unidades = valor % 10;   // Parte decimal (0-9)
+    // Escalar el valor ADC (0-1023) a un rango de 0-255 (0x00-0xFF)
+    uint8_t valor_escalado = (uint8_t)((valor * 255UL) / 1023);
+    
+    // Extraer dígitos hexadecimales
+    display_msb = (valor_escalado >> 4) & 0x0F;  // Dígito más significativo (0-F)
+    display_lsb = valor_escalado & 0x0F;         // Dígito menos significativo (0-F)
 }
 
 void mostrarDisplay(uint8_t display, uint8_t digito)
 {
-	// Desactivar ambos displays
-	PORTB &= ~((1 << PB0) | (1 << PB1));
-	
-	// Pequeño retardo para evitar ghosting
-	_delay_us(100);
-	
-	// Enviar el patrón del dígito a los segmentos y agregar el punto decimal (SEG_DP)
-	PORTD = digitos[digito] | SEG_DP;
-	
-	// Activar el display correspondiente
-	if (display == 0) {
-		PORTB |= (1 << PB0); // Activar display de unidades
-		} else {
-		PORTB |= (1 << PB1); // Activar display de decenas
-	}
+    // Desactivar ambos displays
+    PORTB &= ~((1 << PB0) | (1 << PB1));
+    
+    // Pequeño retardo para evitar ghosting (implementado con un bucle simple)
+    for (volatile uint8_t i = 0; i < 10; i++);
+    
+    // Enviar el patrón del dígito a los segmentos
+    PORTD = digitos_hex[digito];
+    
+    // Activar el display correspondiente
+    if (display == 0) {
+        PORTB |= (1 << PB0); // Activar display de dígito menos significativo
+    } else {
+        PORTB |= (1 << PB1); // Activar display de dígito más significativo
+    }
 }
 
-//
-
-// Interrupt routines
+// Rutina de interrupción del ADC
 ISR(ADC_vect)
 {
     // Leer el valor del ADC (10 bits)
     adc_value = ADC;
     
+    // Marcar que el ADC ha sido actualizado
+    adc_actualizado = 1;
+    
     // Iniciar siguiente conversión
     ADCSRA |= (1 << ADSC);
 }
 
-//
+// Rutina de interrupción del Timer0 (cada ~1ms)
+ISR(TIMER0_COMPA_vect)
+{
+    // Incrementar contadores de tiempo
+    timer_display++;
+    timer_botones++;
+    timer_overflow = 1;
+}
