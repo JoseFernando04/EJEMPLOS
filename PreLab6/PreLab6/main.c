@@ -20,7 +20,7 @@ void escribirString(char* str);
 int main(void)
 {
 	setup();
-	escribirString("23460");
+	escribirString("Brr Brr Patapin");
 	while (1)
 	{
 		
@@ -40,7 +40,7 @@ void setup()
 
 void initUart()
 {
-	//PInes de comunicación, PD0 y PD1  rx y tx
+	//Pines de comunicación, PD0 y PD1  rx y tx
 	DDRD |= (1<<DDD1);
 	DDRD &= ~(1<<DDD0);
 	
@@ -62,7 +62,7 @@ void escribirchar(char letra)
 	UDR0=letra; //Mandamos el caracter
 }
 
-// Nueva función para enviar una cadena completa
+// Función para enviar una cadena completa
 void escribirString(char* str)
 {
 	for(int i = 0; str[i] != '\0'; i++) {
