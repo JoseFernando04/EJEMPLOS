@@ -5,7 +5,6 @@ from Adafruit_IO import MQTTClient
 
 # Configuración de usuario y clave de Adafruit IO
 AIO_USER = "JosFer"
-AIO_KEY = "aio_ODME42cWXbA32WPyXCykQdCYOErN"
 
 # Diccionario de feeds para cada servo
 SERVO_FEEDS = {
